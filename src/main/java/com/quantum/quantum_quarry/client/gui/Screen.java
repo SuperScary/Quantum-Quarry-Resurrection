@@ -31,6 +31,7 @@ public class Screen extends AbstractContainerScreen<ScreenMenu> {
     private final QuarryBlockEntity quarryEntity;
     Button button_mode;
 
+    private int currentLevel;
     private int quarryCache;
     private String quarryBlocksMined;
     private String quarryBiomeType;
@@ -48,6 +49,7 @@ public class Screen extends AbstractContainerScreen<ScreenMenu> {
         this.quarryCache = 0;
         this.quarryBlocksMined = "";
         this.quarryBiomeType = "";
+        this.currentLevel = quarryEntity.currentLevel;
     }
 
     private static final ResourceLocation texture = ResourceLocation.fromNamespaceAndPath("quantum_quarry", "textures/screens/quantum_miner_screen.png");
@@ -97,6 +99,7 @@ public class Screen extends AbstractContainerScreen<ScreenMenu> {
         RenderSystem.disableBlend();
     }
 
+    // TODO: We really don't need to do this...
     @Override
     public boolean keyPressed(int key, int b, int c) {
         if (key == 256) {
@@ -112,7 +115,8 @@ public class Screen extends AbstractContainerScreen<ScreenMenu> {
         guiGraphics.drawString(this.font, Component.translatable("gui.quantum_quarry.quantum_miner_screen.label_quarry_level"), 24, 17, -12829636, false);
         guiGraphics.drawString(this.font, Component.translatable("gui.quantum_quarry.quantum_miner_screen.label_blocks_mined"), 24, 28, -12829636, false);
         guiGraphics.drawString(this.font, Component.translatable("gui.quantum_quarry.quantum_miner_screen.label_biome"), 24, 39, -12829636, false);
-        guiGraphics.drawString(this.font, Component.literal("X"), 93, 18, -12829636, false);
+        // TODO: Update with current quarry level...
+        guiGraphics.drawString(this.font, Component.literal("" + this.currentLevel), 93, 18, -12829636, false);
         guiGraphics.drawString(this.font, Component.literal(this.quarryBlocksMined), 93, 28, -12829636, false);
         guiGraphics.drawString(this.font, Component.literal(this.quarryBiomeType), 56, 39, -12829636, false);
     }
@@ -140,5 +144,6 @@ public class Screen extends AbstractContainerScreen<ScreenMenu> {
         this.quarryCache = this.quarryEntity.mode; //Only call per tick to not overwhelm the system
         this.quarryBlocksMined = String.valueOf(this.quarryEntity.blocksMined);
         this.quarryBiomeType = this.quarryEntity.biomeText;
+        this.currentLevel = this.quarryEntity.currentLevel;
     }
 }

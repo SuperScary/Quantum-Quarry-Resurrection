@@ -71,7 +71,6 @@ public class ChunkMiner {
         Items.DIAMOND_HOE,
         Items.DIAMOND_SWORD
     );
-    
 
     public ChunkMiner(ServerLevel level) {
         this.level = level;
@@ -235,5 +234,9 @@ public class ChunkMiner {
 
     public static Holder<Biome> getBiomeHolderOfChunk(ServerLevel level, ChunkPos pos) {
         return level.getChunk(pos.x, pos.z).getNoiseBiome(((pos.x << 4) + 8) >> 2, 0, ((pos.z << 4) + 8) >> 2);
+    }
+
+    public BlockPos.MutableBlockPos getNextBlockToMinePos () {
+        return nextBlockToMine;
     }
 }

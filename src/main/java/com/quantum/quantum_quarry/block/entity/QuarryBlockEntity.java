@@ -7,6 +7,7 @@ import java.util.stream.IntStream;
 
 import javax.annotation.Nullable;
 
+import org.jetbrains.annotations.NotNull;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -46,6 +47,7 @@ import java.util.Map;
 import java.util.HashMap;
 
 public class QuarryBlockEntity extends RandomizableContainerBlockEntity implements WorldlyContainer {
+
     private static final Logger LOGGER = LoggerFactory.getLogger(QuarryBlockEntity.class);
     private UUID owner;
     private ChunkMiner manager;
@@ -59,6 +61,7 @@ public class QuarryBlockEntity extends RandomizableContainerBlockEntity implemen
     public int mode;
     public int blocksMined;
     public String biomeText;
+    public int currentLevel = 255;
 
     private NonNullList<ItemStack> stacks = NonNullList.<ItemStack>withSize(2, ItemStack.EMPTY);
     private final SidedInvWrapper handler = new SidedInvWrapper(this, null);
@@ -81,71 +84,80 @@ public class QuarryBlockEntity extends RandomizableContainerBlockEntity implemen
     public static void tick(Level level, BlockPos pos, BlockState state, QuarryBlockEntity blockEntity) {
         if (!level.isClientSide && blockEntity.owner != null && level instanceof ServerLevel serverLevel && blockEntity.manager != null) {
             Player player = serverLevel.getPlayerByUUID(blockEntity.owner);
-            if (player != null) {
-                BlockPos core = FindCore.execute(level, pos.getX(), pos.getY(), pos.getZ()); //ensure that we are using the core for validation
-                if (FindCore.validateStructure(level, core)) {
-                    if (
-                        evaluateRedstone(blockEntity) && 
-                        blockEntity.energyStorage.extractEnergy(1, true) == 1
-                    ) {
-                        boolean canMine = true;
-                        if (!blockEntity.manager.itemsToGive.isEmpty()) {
-                            BlockPos[] storages = FindCore.findStorage(level, core);
-                            canMine = blockEntity.manager.itemsToGive.removeIf(item -> {
-                                boolean inserted = false;
-                                for (BlockPos storage: storages) {
-                                    if (FindCore.insertItem(level, storage, item)) {
-                                        inserted = true;
-                                        break;
-                                    }
+            if (player == null) return;
+
+            BlockPos core = FindCore.execute(level, pos.getX(), pos.getY(), pos.getZ()); //ensure that we are using the core for validation
+            if (core == null) return;
+
+            if (FindCore.validateStructure(level, core)) {
+                if (evaluateRedstone(blockEntity) && blockEntity.energyStorage.extractEnergy(1, true) == 1) {
+                    boolean canMine = true;
+                    if (!blockEntity.manager.itemsToGive.isEmpty()) {
+                        BlockPos[] storages = FindCore.findStorage(level, core);
+                        canMine = blockEntity.manager.itemsToGive.removeIf(item -> {
+                            boolean inserted = false;
+                            for (BlockPos storage: storages) {
+                                if (FindCore.insertItem(level, storage, item)) {
+                                    inserted = true;
+                                    break;
                                 }
-                                if (!inserted) {
-                                    LOGGER.warn("Failed to insert {} x {} anywhere! Halting mining!", item.getCount(), item.getDisplayName());
-                                    return false;
-                                }
-                                return true;
-                            });
-                        }
-                        if (!blockEntity.manager.fluidsToGive.isEmpty()) {
-                            BlockPos[] tanks = FindCore.findFluidStorage(level, core);
-                            canMine = blockEntity.manager.fluidsToGive.removeIf(fluid -> {
-                                boolean inserted = false;
-                                for (BlockPos tank : tanks) {
-                                    int remaining = FindCore.insertFluid(level, tank, fluid);
-                                    if (remaining == 0) {
-                                        inserted = true;
-                                        break;
-                                    } else {
-                                        fluid.setAmount(remaining);
-                                    }
-                                }
-                                if (!inserted) {
-                                    LOGGER.warn("Could not insert fluid: {} (remaining: {} mb)", fluid.getFluidType(), fluid.getAmount());
-                                    //return false;
-                                }
-                                return true;
-                            });
-                        }
-                        if (canMine) {
-                            boolean mined = blockEntity.manager.mineNextBlock(blockEntity.bookSlot);
-                            if (!mined) {
-                                blockEntity.manager.startMining(blockEntity.bookSlot, blockEntity.biomeSlot);
-                                mined = blockEntity.manager.mineNextBlock(blockEntity.bookSlot);
                             }
-                            if (mined) {
-                                blockEntity.energyStorage.extractEnergy(1, false);
-                                blockEntity.manager.minedBlocks++;
-                                blockEntity.blocksMined = blockEntity.manager.minedBlocks;
-                                blockEntity.level.sendBlockUpdated(blockEntity.worldPosition, blockEntity.getBlockState(), blockEntity.getBlockState(), 3);
-                            } else {
-                                LOGGER.warn("No blocks available to mine or no valid mining target!");
+                            if (!inserted) {
+                                LOGGER.warn("Failed to insert {} x {} anywhere! Halting mining!", item.getCount(), item.getDisplayName());
+                                return false;
                             }
+                            return true;
+                        });
+                    }
+                    if (!blockEntity.manager.fluidsToGive.isEmpty()) {
+                        BlockPos[] tanks = FindCore.findFluidStorage(level, core);
+                        canMine = blockEntity.manager.fluidsToGive.removeIf(fluid -> {
+                            boolean inserted = false;
+                            for (BlockPos tank : tanks) {
+                                int remaining = FindCore.insertFluid(level, tank, fluid);
+                                if (remaining == 0) {
+                                    inserted = true;
+                                    break;
+                                } else {
+                                    fluid.setAmount(remaining);
+                                }
+                            }
+                            if (!inserted) {
+                                LOGGER.warn("Could not insert fluid: {} (remaining: {} mb)", fluid.getFluidType(), fluid.getAmount());
+                                //return false;
+                            }
+                            return true;
+                        });
+                    }
+                    if (canMine) {
+                        boolean mined = blockEntity.manager.mineNextBlock(blockEntity.bookSlot);
+                        if (!mined) {
+                            blockEntity.manager.startMining(blockEntity.bookSlot, blockEntity.biomeSlot);
+                            mined = blockEntity.manager.mineNextBlock(blockEntity.bookSlot);
+                            blockEntity.setPosition(blockEntity.manager.getNextBlockToMinePos().getY());
+                        }
+                        if (mined) {
+                            blockEntity.energyStorage.extractEnergy(1, false);
+                            blockEntity.manager.minedBlocks++;
+                            blockEntity.blocksMined = blockEntity.manager.minedBlocks;
+                            blockEntity.setPosition(blockEntity.manager.getNextBlockToMinePos().getY());
+                            blockEntity.level.sendBlockUpdated(blockEntity.worldPosition, blockEntity.getBlockState(), blockEntity.getBlockState(), 3);
                         } else {
-                            LOGGER.info("Mining Halted: storage unavailable for items or fluids.");
+                            LOGGER.warn("No blocks available to mine or no valid mining target!");
                         }
+                    } else {
+                        LOGGER.info("Mining Halted: storage unavailable for items or fluids.");
                     }
                 }
             }
+        }
+    }
+
+    private void setPosition (int y) {
+        if (currentLevel <= -1) {
+            currentLevel = 255;
+        } else {
+            currentLevel = y;
         }
     }
 
@@ -175,7 +187,7 @@ public class QuarryBlockEntity extends RandomizableContainerBlockEntity implemen
     }
 
     @Override
-    protected void saveAdditional(CompoundTag tag, Provider provider) {
+    protected void saveAdditional(@NotNull CompoundTag tag, @NotNull Provider provider) {
         super.saveAdditional(tag, provider);
         if (!this.trySaveLootTable(tag)) {
             ContainerHelper.saveAllItems(tag, this.stacks, provider);
@@ -183,6 +195,7 @@ public class QuarryBlockEntity extends RandomizableContainerBlockEntity implemen
         tag.put("energyStorage", energyStorage.serializeNBT(provider));
         tag.putInt("mode", this.mode);
         tag.putInt("mined", this.blocksMined);
+        tag.putInt("level", this.currentLevel);
         tag.putString("BiomeText", this.biomeText);
         if (this.owner != null) {
             tag.putUUID("Owner", this.owner);
@@ -190,7 +203,7 @@ public class QuarryBlockEntity extends RandomizableContainerBlockEntity implemen
     }
 
     @Override
-    protected void loadAdditional(CompoundTag tag, Provider provider) {
+    protected void loadAdditional(@NotNull CompoundTag tag, @NotNull Provider provider) {
         super.loadAdditional(tag, provider);
         if (!this.tryLoadLootTable(tag)) {
             this.stacks = NonNullList.withSize(this.getContainerSize(), ItemStack.EMPTY);
@@ -205,6 +218,7 @@ public class QuarryBlockEntity extends RandomizableContainerBlockEntity implemen
         this.mode = tag.getInt("mode");
         this.blocksMined = tag.getInt("mined");
         this.biomeText = tag.getString("BiomeText");
+        this.currentLevel = tag.getInt("level");
     }
 
     public void cycleMode() {
@@ -223,13 +237,13 @@ public class QuarryBlockEntity extends RandomizableContainerBlockEntity implemen
     }
 
     @Override
-    public void onDataPacket(Connection net, ClientboundBlockEntityDataPacket pkt, Provider provider) {
+    public void onDataPacket(@NotNull Connection net, @NotNull ClientboundBlockEntityDataPacket pkt, @NotNull Provider provider) {
         super.onDataPacket(net, pkt, provider);
         this.loadAdditional(pkt.getTag(), provider);
     }
 
     @Override 
-    public CompoundTag getUpdateTag(Provider lookupProvider) {
+    public @NotNull CompoundTag getUpdateTag(@NotNull Provider lookupProvider) {
         CompoundTag tag = super.getUpdateTag(lookupProvider);
         this.saveAdditional(tag, lookupProvider);
         return tag;
@@ -251,8 +265,8 @@ public class QuarryBlockEntity extends RandomizableContainerBlockEntity implemen
     }
 
     @Override
-    public Component getDefaultName() {
-        return Component.literal("quantum_quarry");
+    public @NotNull Component getDefaultName() {
+        return Component.translatable("block.quantum_quarry.quarry");
     }
 
     @Override
@@ -261,42 +275,42 @@ public class QuarryBlockEntity extends RandomizableContainerBlockEntity implemen
     }
 
     @Override
-    public AbstractContainerMenu createMenu(int id, Inventory inventory) {
+    public @NotNull AbstractContainerMenu createMenu(int id, @NotNull Inventory inventory) {
         return new ScreenMenu(id, inventory, new FriendlyByteBuf(Unpooled.buffer()).writeBlockPos(this.worldPosition));
     }
 
     @Override
-    public Component getDisplayName() {
-        return Component.literal("Quantum Quarry");
+    public @NotNull Component getDisplayName() {
+        return Component.translatable("block.quantum_quarry.quarry");
     }
 
     @Override
-    protected NonNullList<ItemStack> getItems() {
+    protected @NotNull NonNullList<ItemStack> getItems() {
         return this.stacks;
     }
 
     @Override
-    protected void setItems(NonNullList<ItemStack> stacks) {
+    protected void setItems(@NotNull NonNullList<ItemStack> stacks) {
         this.stacks = stacks;
     }
 
     @Override
-    public boolean canPlaceItem(int index, ItemStack stack) {
+    public boolean canPlaceItem(int index, @NotNull ItemStack stack) {
         return true;
     }
 
     @Override
-    public int[] getSlotsForFace(Direction side) {
+    public int @NotNull [] getSlotsForFace(@NotNull Direction side) {
         return IntStream.range(0, this.getContainerSize()).toArray();
     }
 
     @Override
-    public boolean canPlaceItemThroughFace(int index, ItemStack stack, @Nullable Direction direction) {
+    public boolean canPlaceItemThroughFace(int index, @NotNull ItemStack stack, @Nullable Direction direction) {
         return this.canPlaceItem(index, stack);
     }
 
     @Override
-    public boolean canTakeItemThroughFace(int index, ItemStack stack, Direction direction) {
+    public boolean canTakeItemThroughFace(int index, @NotNull ItemStack stack, @NotNull Direction direction) {
         if (index == 0)
             return false;
         if (index == 1)
@@ -336,16 +350,12 @@ public class QuarryBlockEntity extends RandomizableContainerBlockEntity implemen
 
     private static boolean evaluateRedstone(QuarryBlockEntity entity) {
         //LOGGER.info("Checking Mode {} with signal {}", mode, isReceiving);
-        switch (entity.mode) {
-            case 0:
-                return true;
-            case 1:
-                return entity.minerRedstoneStates.values().stream().anyMatch(Boolean::booleanValue);
-            case 2:
-                return !(entity.minerRedstoneStates.values().stream().anyMatch(Boolean::booleanValue));
-            default:
-                return false;
-        }
+        return switch (entity.mode) {
+            case 0 -> true;
+            case 1 -> entity.minerRedstoneStates.values().stream().anyMatch(Boolean::booleanValue);
+            case 2 -> entity.minerRedstoneStates.values().stream().noneMatch(Boolean::booleanValue);
+            default -> false;
+        };
     }
 
     public void updateMinerState(BlockPos minerPos, boolean isPowered) {
