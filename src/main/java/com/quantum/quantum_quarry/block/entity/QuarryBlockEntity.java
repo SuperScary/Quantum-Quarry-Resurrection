@@ -61,7 +61,7 @@ public class QuarryBlockEntity extends RandomizableContainerBlockEntity implemen
     public int mode;
     public int blocksMined;
     public String biomeText;
-    public int currentLevel = 255;
+    public int currentLevel = 0;
 
     private NonNullList<ItemStack> stacks = NonNullList.<ItemStack>withSize(2, ItemStack.EMPTY);
     private final SidedInvWrapper handler = new SidedInvWrapper(this, null);
@@ -90,7 +90,7 @@ public class QuarryBlockEntity extends RandomizableContainerBlockEntity implemen
             if (core == null) return;
 
             if (FindCore.validateStructure(level, core)) {
-                if (evaluateRedstone(blockEntity) && blockEntity.energyStorage.extractEnergy(1, true) == 1) {
+                if (evaluateRedstone(blockEntity) && blockEntity.energyStorage.extractEnergy(20_000, true) == 1) {
                     boolean canMine = true;
                     if (!blockEntity.manager.itemsToGive.isEmpty()) {
                         BlockPos[] storages = FindCore.findStorage(level, core);
@@ -103,7 +103,8 @@ public class QuarryBlockEntity extends RandomizableContainerBlockEntity implemen
                                 }
                             }
                             if (!inserted) {
-                                LOGGER.warn("Failed to insert {} x {} anywhere! Halting mining!", item.getCount(), item.getDisplayName());
+                                // TODO: We should update the GUI to inform the user the quarry stopped rather than spamming the console every tick.
+                                // LOGGER.warn("Failed to insert {} x {} anywhere! Halting mining!", item.getCount(), item.getDisplayName());
                                 return false;
                             }
                             return true;
@@ -137,16 +138,16 @@ public class QuarryBlockEntity extends RandomizableContainerBlockEntity implemen
                             blockEntity.setPosition(blockEntity.manager.getNextBlockToMinePos().getY());
                         }
                         if (mined) {
-                            blockEntity.energyStorage.extractEnergy(1, false);
+                            blockEntity.energyStorage.extractEnergy(20_000, false);
                             blockEntity.manager.minedBlocks++;
                             blockEntity.blocksMined = blockEntity.manager.minedBlocks;
                             blockEntity.setPosition(blockEntity.manager.getNextBlockToMinePos().getY());
                             blockEntity.level.sendBlockUpdated(blockEntity.worldPosition, blockEntity.getBlockState(), blockEntity.getBlockState(), 3);
                         } else {
-                            LOGGER.warn("No blocks available to mine or no valid mining target!");
+                            // LOGGER.warn("No blocks available to mine or no valid mining target!");
                         }
                     } else {
-                        LOGGER.info("Mining Halted: storage unavailable for items or fluids.");
+                        // LOGGER.info("Mining Halted: storage unavailable for items or fluids.");
                     }
                 }
             }
@@ -154,11 +155,7 @@ public class QuarryBlockEntity extends RandomizableContainerBlockEntity implemen
     }
 
     private void setPosition (int y) {
-        if (currentLevel <= -1) {
-            currentLevel = 255;
-        } else {
-            currentLevel = y;
-        }
+        currentLevel = y;
     }
 
     private int getTotalFluidVolume() {
@@ -179,10 +176,10 @@ public class QuarryBlockEntity extends RandomizableContainerBlockEntity implemen
     public void onLoad() {
         super.onLoad();
         if (!this.level.isClientSide) {
-            this.setChanged();
             if (this.owner != null && this.manager == null && this.level instanceof ServerLevel serverLevel) {
                 this.manager = new ChunkMiner(serverLevel);
             }
+            this.setChanged();
         }
     }
 
@@ -311,11 +308,8 @@ public class QuarryBlockEntity extends RandomizableContainerBlockEntity implemen
 
     @Override
     public boolean canTakeItemThroughFace(int index, @NotNull ItemStack stack, @NotNull Direction direction) {
-        if (index == 0)
-            return false;
-        if (index == 1)
-            return false;
-        return true;
+        if (index == 0) return false;
+        return index != 1;
     }
 
     public SidedInvWrapper getItemHandler() {
@@ -325,6 +319,7 @@ public class QuarryBlockEntity extends RandomizableContainerBlockEntity implemen
     private final EnergyStorage energyStorage = new EnergyStorage(200000, 200000, 200000, 0) {
         @Override
         public int receiveEnergy(int maxReceive, boolean simulate) {
+
             int retval = super.receiveEnergy(maxReceive, simulate);
             if (!simulate) {
                 setChanged();
@@ -349,7 +344,6 @@ public class QuarryBlockEntity extends RandomizableContainerBlockEntity implemen
     }
 
     private static boolean evaluateRedstone(QuarryBlockEntity entity) {
-        //LOGGER.info("Checking Mode {} with signal {}", mode, isReceiving);
         return switch (entity.mode) {
             case 0 -> true;
             case 1 -> entity.minerRedstoneStates.values().stream().anyMatch(Boolean::booleanValue);
@@ -359,7 +353,6 @@ public class QuarryBlockEntity extends RandomizableContainerBlockEntity implemen
     }
 
     public void updateMinerState(BlockPos minerPos, boolean isPowered) {
-        LOGGER.info("Miner @ {} Changed Redstone State to Powered = {}", minerPos, isPowered);
         minerRedstoneStates.put(minerPos, isPowered);
     }
 

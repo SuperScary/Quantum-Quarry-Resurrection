@@ -228,8 +228,7 @@ public class ChunkMiner {
         // Estimated
         LevelChunk chunk = level.getChunk(pos.x, pos.z);
         Holder<Biome> biome = chunk.getNoiseBiome(((pos.x << 4) + 8) >> 2, 0, ((pos.z << 4) + 8) >> 2);
-        ResourceKey<Biome> biomeKey = biome.unwrapKey().orElse(null);
-        return biomeKey;
+        return biome.unwrapKey().orElse(null);
     }
 
     public static Holder<Biome> getBiomeHolderOfChunk(ServerLevel level, ChunkPos pos) {

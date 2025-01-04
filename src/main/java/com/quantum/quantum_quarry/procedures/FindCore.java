@@ -96,9 +96,9 @@ public class FindCore {
             BlockPos.containing(pos.getX(), pos.getY() - 1, pos.getZ() - 1),
             BlockPos.containing(pos.getX(), pos.getY(), pos.getZ() - 1 - 1), // ignore + 1 on the Z cause that is the quarry face
         };
-        return Arrays.asList(positions).stream().filter(face -> {
+        return Arrays.stream(positions).filter(face -> {
             return world.getCapability(Capabilities.ItemHandler.BLOCK, face, Direction.UP) != null;
-        }).collect(Collectors.toList()).toArray(new BlockPos[0]);
+        }).toList().toArray(new BlockPos[0]);
     }
 
     public static BlockPos[] findFluidStorage(Level world, BlockPos pos) {

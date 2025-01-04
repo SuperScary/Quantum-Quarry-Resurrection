@@ -1,7 +1,12 @@
 package com.quantum.quantum_quarry.client.gui;
 
+import java.text.DecimalFormat;
 import java.util.HashMap;
+import java.util.List;
+import java.util.Optional;
 
+import com.quantum.quantum_quarry.util.MouseUtil;
+import net.neoforged.neoforge.energy.EnergyStorage;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -36,6 +41,13 @@ public class Screen extends AbstractContainerScreen<ScreenMenu> {
     private String quarryBlocksMined;
     private String quarryBiomeType;
 
+    private final int ENERGY_LEFT = 158;
+    private final int ENERGY_WIDTH = 8;
+    private final int ENERGY_TOP = 9;
+    private final int ENERGY_HEIGHT = 64;
+
+    private EnergyDisplayTooltipArea energyInfoArea;
+
     public Screen(ScreenMenu container, Inventory inventory, Component text) {
         super(container, inventory, text);
         this.world = container.world;
@@ -50,6 +62,8 @@ public class Screen extends AbstractContainerScreen<ScreenMenu> {
         this.quarryBlocksMined = "";
         this.quarryBiomeType = "";
         this.currentLevel = quarryEntity.currentLevel;
+
+        assignEnergyInfoArea();
     }
 
     private static final ResourceLocation texture = ResourceLocation.fromNamespaceAndPath("quantum_quarry", "textures/screens/quantum_miner_screen.png");
@@ -97,15 +111,17 @@ public class Screen extends AbstractContainerScreen<ScreenMenu> {
         //guiGraphics.blit(ResourceLocation.fromNamespaceAndPath("quantum_quarry", "textures/screens/redstonetorchresize.png"), this.leftPos + 25, this.topPos + 80, 0, 0, 16, 16, 16, 16);
         //guiGraphics.blit(ResourceLocation.fromNamespaceAndPath("quantum_quarry", "textures/screens/energy_cell_level_0.png"), this.leftPos + 153, this.topPos + 81, 0, 0, 16, 16, 16, 16);
         RenderSystem.disableBlend();
+
+        renderEnergyArea(guiGraphics);
     }
 
-    // TODO: We really don't need to do this...
+    // TODO: Do we need to do this...?
     @Override
     public boolean keyPressed(int key, int b, int c) {
-        if (key == 256) {
+        /*if (key == 256) {
             this.minecraft.player.closeContainer();
             return true;
-        }
+        }*/
         return super.keyPressed(key, b, c);
     }
 
@@ -115,10 +131,11 @@ public class Screen extends AbstractContainerScreen<ScreenMenu> {
         guiGraphics.drawString(this.font, Component.translatable("gui.quantum_quarry.quantum_miner_screen.label_quarry_level"), 24, 17, -12829636, false);
         guiGraphics.drawString(this.font, Component.translatable("gui.quantum_quarry.quantum_miner_screen.label_blocks_mined"), 24, 28, -12829636, false);
         guiGraphics.drawString(this.font, Component.translatable("gui.quantum_quarry.quantum_miner_screen.label_biome"), 24, 39, -12829636, false);
-        // TODO: Update with current quarry level...
-        guiGraphics.drawString(this.font, Component.literal("" + this.currentLevel), 93, 18, -12829636, false);
+        guiGraphics.drawString(this.font, Component.literal("" + this.currentLevel), 93, 17, -12829636, false);
         guiGraphics.drawString(this.font, Component.literal(this.quarryBlocksMined), 93, 28, -12829636, false);
         guiGraphics.drawString(this.font, Component.literal(this.quarryBiomeType), 56, 39, -12829636, false);
+
+        renderEnergyAreaTooltips(guiGraphics, mouseX, mouseY, (width - imageWidth) / 2, (height - imageHeight) / 2);
     }
 
     @Override
@@ -130,7 +147,7 @@ public class Screen extends AbstractContainerScreen<ScreenMenu> {
     public void init() {
         super.init();
         button_mode = Button.builder(Component.translatable("gui.quantum_quarry.quantum_miner_screen.button_empty"), e -> {
-            LOGGER.info("Sending packet with location: {}", this.quarryEntity.location);
+            // LOGGER.info("Sending packet with location: {}", this.quarryEntity.location);
             ChangeModeRequest pkt = new ChangeModeRequest(this.quarryEntity.location);
             PacketDistributor.sendToServer(pkt);
         }).bounds(this.leftPos + 4, this.topPos + 57, 20, 20).build();
@@ -146,4 +163,41 @@ public class Screen extends AbstractContainerScreen<ScreenMenu> {
         this.quarryBiomeType = this.quarryEntity.biomeText;
         this.currentLevel = this.quarryEntity.currentLevel;
     }
+
+    //================================================================================================================\\
+    //============================================ ENERGY AREA =======================================================\\
+    //================================================================================================================\\
+
+    public void renderEnergyArea (GuiGraphics guiGraphics) {
+        int left = leftPos + ENERGY_LEFT;
+        int top = topPos + ENERGY_TOP;
+
+        energyInfoArea.render(guiGraphics, left, top);
+    }
+
+    private void assignEnergyInfoArea () {
+        this.energyInfoArea = new EnergyDisplayTooltipArea(ENERGY_LEFT, ENERGY_TOP, getEnergyStorage(), ENERGY_WIDTH, ENERGY_HEIGHT);
+    }
+
+    public EnergyStorage getEnergyStorage () {
+        return quarryEntity.getEnergyStorage();
+    }
+
+    private void renderEnergyAreaTooltips (GuiGraphics guiGraphics, int mouseX, int mouseY, int x, int y) {
+        if (isMouseAboveArea(mouseX, mouseY, x, y, ENERGY_LEFT, ENERGY_TOP, ENERGY_WIDTH, ENERGY_HEIGHT)) {
+            guiGraphics.renderTooltip(this.font, getEnergyTooltips(), Optional.empty(), mouseX - x, mouseY - y);
+        }
+    }
+
+    public List<Component> getEnergyTooltips () {
+        DecimalFormat format = new DecimalFormat("#,###");
+        return List.of(Component.literal(format.format(getEnergyStorage().getEnergyStored()) +
+                " / " + format.format(getEnergyStorage().getMaxEnergyStored()) + " FE"));
+    }
+
+    @SuppressWarnings("SameParameterValue")
+    private boolean isMouseAboveArea (int pMouseX, int pMouseY, int x, int y, int offsetX, int offsetY, int width, int height) {
+        return MouseUtil.isMouseOver(pMouseX, pMouseY, x + offsetX, y + offsetY, width, height);
+    }
+
 }
